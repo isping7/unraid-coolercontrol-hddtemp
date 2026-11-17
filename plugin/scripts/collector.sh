@@ -10,7 +10,8 @@ CFG="/boot/config/plugins/cooler-hddtemp/settings.cfg"
 OUT_HDD="/mnt/user/appdata/coolercontrol/hdd_temp"
 OUT_SSD="/mnt/user/appdata/coolercontrol/ssd_temp"
 STATUS="/usr/local/emhttp/plugins/cooler-hddtemp/status.json"
-LOG_FILE="/boot/config/plugins/cooler-hddtemp/event.log"
+D="/boot/config/plugins/cooler-hddtemp"
+LOG_FILE="$D/event.log"
 LOG_MAX_LINES=500
 LOG_ROTATE_AT=1000     # 高水位: 累积到 1000 行才轮转回 500 行（原逻辑满 500 行后每轮整份重写，U 盘 551MB/天）
 LOG_MAX_KB=128
@@ -105,6 +106,7 @@ print "IV=".($c->{i}//30)."\n";
 print "HM=".($c->{hm}//"avg")."\n";
 print "SM=".($c->{sm}//"avg")."\n";
 print "HOT=".($c->{hot}//50)."\n";
+print "AUTO=".($c->{auto}?1:0)."\n";
 for my $s (@{$c->{d}//$c->{disks}//[]}){print "$s\n";}
 ' 2>/dev/null)
 
@@ -112,7 +114,22 @@ for my $s (@{$c->{d}//$c->{disks}//[]}){print "$s\n";}
     HM=$(echo "$CFG_DATA" | grep "^HM=" | cut -d= -f2); HM=${HM:-avg}
     SM=$(echo "$CFG_DATA" | grep "^SM=" | cut -d= -f2); SM=${SM:-avg}
     HOT=$(echo "$CFG_DATA" | grep "^HOT=" | cut -d= -f2); HOT=${HOT:-50}
-    SERIALS=$(echo "$CFG_DATA" | grep -v "^IV=\|^HM=\|^SM=\|^HOT=")
+    AUTO=$(echo "$CFG_DATA" | grep "^AUTO=" | cut -d= -f2); AUTO=${AUTO:-0}
+    SERIALS=$(echo "$CFG_DATA" | grep -v "^IV=\|^HM=\|^SM=\|^HOT=\|^AUTO=")
+
+    # ---- 自动纳入新盘（auto=1，最多每 60 秒探测一次）----
+    if [ "$AUTO" = "1" ]; then
+        DISC_F=/tmp/cooler-hddtemp-discover
+        NOW=$(date +%s)
+        LAST=$(cat "$DISC_F" 2>/dev/null || echo 0)
+        if [ $((NOW - LAST)) -ge 60 ]; then
+            MERGED=$(php "$D/lib/scan.php" 2>/dev/null | php "$D/lib/autoadd.php" 2>/tmp/cooler-hddtemp-auto.err)
+            echo "$NOW" > "$DISC_F"
+            [ -n "$MERGED" ] && SERIALS="$MERGED"
+            AUTO_MSG=$(cat /tmp/cooler-hddtemp-auto.err 2>/dev/null)
+            [ -n "$AUTO_MSG" ] && log "INFO" "自动纳入: $AUTO_MSG"
+        fi
+    fi
 
     # ---- 采集温度 ----
     SUM_HDD=0; CNT_HDD=0; MAX_HDD=0

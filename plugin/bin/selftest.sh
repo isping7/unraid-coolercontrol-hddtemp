@@ -192,6 +192,12 @@ PIDS=$(for p in $(pgrep -f 'cooler-hddtemp/scripts/collector.sh' 2>/dev/null); d
 PF=$(cat "$PIDF" 2>/dev/null || echo "")
 eq "G9 PID 文件与实际进程一致" "${PF:-none}" "${PIDS:-none}"
 
+if [ -f "$D/lib/autoadd.php" ] && php -l "$D/lib/autoadd.php" >/dev/null 2>&1; then
+  ok "G10 lib/autoadd.php 存在且语法正确"
+else
+  bad "G10 lib/autoadd.php 缺失或语法错误"
+fi
+
 # ================================================================ FULL 模式
 if [ "$MODE" = "full" ]; then
   if [ "$ASSUME_YES" != "1" ] && [ -t 0 ]; then

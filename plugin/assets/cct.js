@@ -57,6 +57,7 @@
       sm: sm ? sm.value : '',
       w: document.getElementById('fWarn').value,
       h: document.getElementById('fHot').value,
+      a: document.getElementById('fAuto').checked ? '1' : '0',
       d: disks
     });
   }
@@ -73,6 +74,7 @@
     if (a.sm !== b.sm) out.push('SSD ' + label(a.sm, lang) + ' → ' + label(b.sm, lang));
     if (a.w !== b.w) out.push((en ? 'Warn ' : '告警 ') + a.w + ' → ' + b.w + '°C');
     if (a.h !== b.h) out.push((en ? 'Hot ' : '高温 ') + a.h + ' → ' + b.h + '°C');
+    if (a.a !== b.a) out.push(en ? 'Auto-add ' + (a.a === '1' ? 'on→off' : 'off→on') : '自动纳入 ' + (a.a === '1' ? '开→关' : '关→开'));
     var an = Object.keys(a.d).filter(function (k) { return a.d[k]; }).length;
     var bn = Object.keys(b.d).filter(function (k) { return b.d[k]; }).length;
     if (an !== bn) out.push((en ? 'Disks ' : '盘数 ') + an + ' → ' + bn);

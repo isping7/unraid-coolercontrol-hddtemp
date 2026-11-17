@@ -12,6 +12,7 @@ plugin/
 ├── lib/
 │   ├── scan.php              disk domain (CLI): smartctl scan + slot ordering → JSON
 │   └── control.php           process domain (CLI): status / start / stop → JSON
+│   └── autoadd.php           auto-adopt: merge smartctl scan into settings.cfg (atomic)
 ├── scripts/
 │   └── collector.sh          the collector itself (bash, one long-running process)
 └── bin/
@@ -45,6 +46,15 @@ WebUI polls status.json every N seconds and repaints the two panes
 ```
 
 ## Design decisions
+
+### Auto-add is opt-in and time-boxed
+
+When uto is on, the collector does a **full** smartctl scan at most once every 60 s
+(a timestamp file under /tmp gates it), diffs the serial list against settings.cfg,
+and rewrites the config atomically only when something changed. The classification is the
+same code path as the UI (Solid State Device → SSD, SAS → HDD), so a replaced drive lands
+in the right group without any manual step. Off by default, because it also *removes*
+drives that are no longer present — which would fight a deliberate exclusion.
 
 ### Saving never restarts the collector
 

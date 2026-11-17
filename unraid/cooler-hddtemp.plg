@@ -12,52 +12,66 @@
 <!ELEMENT MD5 (#PCDATA)>
 <!ELEMENT INSTALL (#PCDATA)>
 ]>
-<PLUGIN name="cooler-hddtemp" author="mac-ping" version="2026.11.17" pluginURL="https://github.com/isping7/unraid-coolercontrol-hddtemp" minVersion="7.0" launch="Settings/cooler-hddtemp" support="https://github.com/isping7/unraid-coolercontrol-hddtemp/issues">
+<PLUGIN name="cooler-hddtemp" author="mac-ping" version="2026.11.17.1" pluginURL="https://github.com/isping7/unraid-coolercontrol-hddtemp" minVersion="7.0" launch="Settings/cooler-hddtemp" support="https://github.com/isping7/unraid-coolercontrol-hddtemp/issues">
 <NAME>Drive Temperature (cooler-hddtemp)</NAME>
 <AUTHOR>mac-ping</AUTHOR>
-<VERSION>2026.11.17</VERSION>
+<VERSION>2026.11.17.1</VERSION>
 <DATE>2026-11-17</DATE>
 <DESCRIPTION>
 Collect HDD/SSD temperatures with smartctl and publish them as millidegree files for
 CoolerControl file sensors. Max or average aggregation, hot-reload settings, dual-pane
-WebUI, self-test script.
+WebUI, auto-add new drives, self-test script.
 </DESCRIPTION>
 <CHANGES>
+[2026.11.17.1] v3.1.0: auto-add new drives (opt-in, HDD/SSD decided by smartctl).
 [2026.11.17] v3.0: split architecture, single-page i18n, hot-reload saves, atomic config writes,
 configurable thresholds, dual-pane responsive UI, selftest.sh; removed the stop button.
 </CHANGES>
 <FILE Name="/boot/config/plugins/cooler-hddtemp/cooler-hddtemp.page">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/cooler-hddtemp.page</URL>
-<MD5>9a7636399b6be72db6e5e60ba1dd9913</MD5>
+<MD5>373355560611fd1b5d16c80b08778364</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/cooler-hddtemp-en.page">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/cooler-hddtemp-en.page</URL>
 <MD5>398e007916cd5e950b5d13507d059f25</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/assets/cct.css">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/assets/cct.css</URL>
-<MD5>5c99185dc5e30c314283d14efc469df8</MD5>
+<MD5>9b8f90491ffc916fe22342f45f9aaea8</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/assets/cct.js">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/assets/cct.js</URL>
-<MD5>c0debbe0c5f7cbb9e00474b5b42ce073</MD5>
+<MD5>4837ca69f59f8cffb9d899f931d4c1ac</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/lib/scan.php">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/lib/scan.php</URL>
 <MD5>71321cee86d76fd54cfd2838bd72e92c</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/lib/control.php">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/lib/control.php</URL>
 <MD5>385ee5a3644d5e700ee8206c116f3e8e</MD5>
 </FILE>
+
+<FILE Name="/boot/config/plugins/cooler-hddtemp/lib/autoadd.php">
+<URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/lib/autoadd.php</URL>
+<MD5>d7ec376f6d2222048fae439184258a48</MD5>
+</FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/scripts/collector.sh">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/scripts/collector.sh</URL>
-<MD5>f13c0dc76ae714a04ce6839ffd5b1919</MD5>
+<MD5>87a81251ac23618dcda7eaec9fe5df84</MD5>
 </FILE>
+
 <FILE Name="/boot/config/plugins/cooler-hddtemp/bin/selftest.sh">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/bin/selftest.sh</URL>
 <MD5>1055baf0973478b7cdd788b1e17df79a</MD5>
 </FILE>
+
 
 <INSTALL>
 #!/bin/bash
@@ -70,6 +84,5 @@ if ! grep -q "cooler-hddtemp/assets/cct.css" /boot/config/go; then
   echo "mkdir -p /usr/local/emhttp/plugins/cooler-hddtemp/assets" &gt;&gt; /boot/config/go
   echo "cp /boot/config/plugins/cooler-hddtemp/assets/cct.css /boot/config/plugins/cooler-hddtemp/assets/cct.js /usr/local/emhttp/plugins/cooler-hddtemp/assets/" &gt;&gt; /boot/config/go
 fi
-echo "cooler-hddtemp installed. Start the collector with a User Scripts entry (At Startup of Array)."
-</INSTALL>
+echo "cooler-hddtemp installed. Start the collector with a User Scripts entry (At Startup of Array)."</INSTALL>
 </PLUGIN>

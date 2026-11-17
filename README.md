@@ -32,6 +32,7 @@ don't provide one, so HDD/SSD temperature is invisible to it. This plugin:
 - **Dual-pane UI**: all HDDs on the left, all SSDs on the right, everything on one screen
   (tested at 1024 / 1280 / 1920 / 2560 / 3840 px)
 - **Bilingual UI** (中文 / English) via cookie
+- **Auto-add new drives** (opt-in): every 60 s the collector compares the smartctl scan with the saved list and adopts drives that appeared — HDD/SSD is decided by smartctl, SAS counts as HDD. Ideal after replacing a disk.
 - **Configurable warn/hot thresholds** — colours and log hints only; **they do not touch fans**
 - **Self-test script** (`bin/selftest.sh`) with 18 read-only checks, or 34 including
   destructive fail-safe tests
@@ -116,6 +117,7 @@ Open **Settings → Utilities → 硬盘温度采集** (Drive Temperature). The 
 | HDD / SSD aggregation | avg / avg | `max` (hottest drive) or `avg` |
 | Warn / Hot | 40 / 50 °C | UI colours + log warnings only |
 | Scope | all | untick a drive to exclude it (at least one must stay) |
+| Auto-add new drives | off | adopt drives found by the scan but missing from the list; **overrides manual exclusions** |
 
 Config file: `/boot/config/plugins/cooler-hddtemp/settings.cfg` (see
 `unraid/settings.example.cfg`). Temperature files:

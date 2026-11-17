@@ -4,6 +4,20 @@ All notable changes to this plugin are documented here.
 Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 `MAJOR.MINOR.PATCH` and the Unraid plugin version uses `YYYY.MM.DD` in `unraid/*.plg`.
 
+## [3.1.0] — 2026-11-17
+
+### Added
+- **Auto-add new drives** (uto in settings.cfg, toggle in the settings drawer):
+  every 60 s the collector runs smartctl over all devices, and adopts drives that are
+  present but missing from the saved list — HDD/SSD classification comes from smartctl
+  (Solid State Device), SAS drives count as HDD. Removed drives are dropped from the
+  list at the same time.
+- New CLI module lib/autoadd.php (pure logic, atomic config write, no-op when disabled).
+- Ideal after replacing a disk: no manual re-selection, no CoolerControl change.
+
+### Notes
+- Enabling it **overrides manual exclusions** — a drive you unticked will be re-added.
+  That is why the default is off.
 ## [3.0.0] — 2026-11-17
 
 Complete rewrite of the WebUI and the data path. Settings are backward compatible.

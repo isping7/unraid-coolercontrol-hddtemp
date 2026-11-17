@@ -48,6 +48,8 @@ $L = $lang === 'en' ? [
     'interval' => 'Interval',
     'mode'     => 'Aggregation',
     'warnlbl'  => 'Warn / Hot threshold',
+      'auto'     => 'Auto-add new drives',
+      'auto_hint'=> 'Checked every 60 s: drives that appear but are not in the list are added automatically. HDD/SSD is decided by smartctl (SAS counts as HDD). Overrides manual exclusions.',
     'scope'    => 'Scope',
     'save'     => 'Save',
     'cancel'   => 'Cancel',
@@ -99,6 +101,8 @@ $L = $lang === 'en' ? [
     'interval' => '采集间隔',
     'mode'     => '取值方式',
     'warnlbl'  => '显示告警阈值 / 高温阈值',
+      'auto'     => '自动纳入新盘',
+      'auto_hint'=> '每 60 秒探测一次：扫到但不在列表里的盘会自动加入，HDD/SSD 由 smartctl 判定（SAS 归入 HDD）。注意：开启后会覆盖你手动取消勾选的意图。',
     'scope'    => '采集范围',
     'save'     => '保存',
     'cancel'   => '取消',
@@ -136,7 +140,7 @@ $L = $lang === 'en' ? [
 // ③ 配置域 -------------------------------------------------------------------
 function cct_load_cfg(): array {
     global $CFG;
-    $def = ['i' => 10, 'd' => [], 'e' => false, 'hm' => 'avg', 'sm' => 'avg', 'warn' => 40, 'hot' => 50];
+    $def = ['i' => 10, 'd' => [], 'e' => false, 'hm' => 'avg', 'sm' => 'avg', 'warn' => 40, 'hot' => 50, 'auto' => false];
     if (!file_exists($CFG)) return $def;
     $c = json_decode((string)@file_get_contents($CFG), true);
     if (!is_array($c)) { $GLOBALS['CCT_CFG_ERROR'] = true; return $def; }
@@ -215,12 +219,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['#apply'])) {
     $sm   = in_array($_POST['ssd_mode'] ?? '', ['avg', 'max'], true) ? $_POST['ssd_mode'] : 'avg';
     $warn = max(20, min(65, intval($_POST['warn'] ?? 40)));
     $hot  = max($warn + 1, min(80, intval($_POST['hot'] ?? 50)));
+    $auto = !empty($_POST['auto']);
 
     if (count($ds) === 0) {
         $err = $L['err_nodisk'];
     } else {
         $old = cct_load_cfg();
-        $new = ['i' => $iv, 'd' => $ds, 'e' => true, 'hm' => $hm, 'sm' => $sm, 'warn' => $warn, 'hot' => $hot];
+        $new = ['i' => $iv, 'd' => $ds, 'e' => true, 'hm' => $hm, 'sm' => $sm, 'warn' => $warn, 'hot' => $hot, 'auto' => $auto];
         if (cct_save_cfg($new)) {
             cct_log('配置变更: ' . cct_cfg_diff($old, $new));
             $run = (cct_cli_json($CTL, 'status')['running'] ?? false);
@@ -484,6 +489,11 @@ $rowsJson = json_encode(array_map(function ($d) {
       </div>
       <div class="hint"><?= $L['hint_th'] ?></div>
     </div>
+    <div class="fld">
+      <label for="fAuto"><?= $L['auto'] ?></label>
+      <label class="sw"><input type="checkbox" name="auto" id="fAuto" value="1" <?= !empty($cfg['auto']) ? 'checked' : '' ?>></label>
+        <div class="hint"><?= $L['auto_hint'] ?></div>
+      </div>
     <div class="fld">
       <label><?= $L['scope'] ?></label>
       <div class="hint"><?= $L['hint_scope'] ?></div>
