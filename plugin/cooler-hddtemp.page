@@ -1,0 +1,502 @@
+Menu="Utilities"
+Title="硬盘温度采集"
+Icon="fa-thermometer-half"
+Tag="cooler-hddtemp"
+---
+<?php
+/* =============================================================================
+ * 硬盘温度采集 · 页面（只做编排与渲染）
+ *   磁盘域  → lib/scan.php      （smartctl 扫描、槽位排序）
+ *   进程域  → lib/control.php   （启停、存活判定）
+ *   配置域  → 本文件 load/save  （原子写 + 审计）
+ *   表现层  → assets/cct.css、assets/cct.js
+ * 业务约定：保存配置只写文件，不重启采集器；采集器每轮自读配置，下一轮生效
+ * ========================================================================== */
+
+// ① 路径 ---------------------------------------------------------------------
+$D         = '/boot/config/plugins/cooler-hddtemp';
+$CFG       = "$D/settings.cfg";
+$LOG_FILE  = "$D/event.log";
+$OUT_HDD   = '/mnt/user/appdata/coolercontrol/hdd_temp';
+$OUT_SSD   = '/mnt/user/appdata/coolercontrol/ssd_temp';
+$PID       = '/tmp/cooler-hddtemp.pid';
+$SCAN      = "$D/lib/scan.php";
+$CTL       = "$D/lib/control.php";
+$ASSETS    = '/plugins/cooler-hddtemp/assets';
+
+// ② 语言 ---------------------------------------------------------------------
+$lang = 'zh';
+if (isset($_GET['lang']) && $_GET['lang'] === 'en') $lang = 'en';
+elseif (($_COOKIE['cct_lang'] ?? '') === 'en') $lang = 'en';
+
+$L = $lang === 'en' ? [
+    'title'    => 'Drive Temperature',
+    'running'  => 'Running',
+    'stopped'  => 'Stopped',
+    'stale'    => 'Stale',
+    'ago'      => 'ago',
+    'updated'  => 'updated',
+    'refresh'  => 'Rescan',
+    'start'    => 'Start',
+    'settings' => 'Settings',
+    'hdd'      => 'HDD',
+    'ssd'      => 'SSD',
+    'blocks'   => 'drives',
+    'max'      => 'Max',
+    'min'      => 'Min',
+    'avg'      => 'Avg',
+    'interval' => 'Interval',
+    'mode'     => 'Aggregation',
+    'warnlbl'  => 'Warn / Hot threshold',
+    'scope'    => 'Scope',
+    'save'     => 'Save',
+    'cancel'   => 'Cancel',
+    'unsaved'  => 'Unsaved changes',
+    'discard'  => 'Discard',
+    'log'      => 'Event log',
+    'paths'    => 'Files & paths',
+    'export'   => 'CSV',
+    'copy'     => 'Copy',
+    'last'     => 'Last update',
+    'next'     => 'Next round',
+    'pid'      => 'Collector PID',
+    'nodata'   => 'No data',
+    'title_agg'=> 'HDD aggregation',
+    'title_agg2'=> 'SSD aggregation',
+    'hint_iv'  => '5–60s. Applies on the next round, <b>without interrupting collection</b>.',
+    'hint_th'  => 'Colour and log hints only (≥warn orange, ≥hot red). <b>Does not control fans</b>; fan curves live in CoolerControl.',
+    'hint_scope'=> 'Uncheck a drive to exclude it. <b>At least one</b> must stay selected.',
+    'note_save'=> 'Applies within',
+    'note_save2'=> 'seconds.<br>No restart, no data gap.',
+    'selectall'=> 'All',
+    'invert'   => 'Invert',
+    'err_nodisk'=> 'Select at least one drive. Nothing was saved.',
+    'msg_saved'=> 'Saved. Takes effect on the next round (≤%ds). Collection was not interrupted.',
+    'msg_saved_stopped'=> 'Saved. The collector is not running — click Start.',
+    'msg_savefail'=> 'Failed to save (disk or permission issue). Previous config kept.',
+    'msg_started'=> 'Collector started (PID %d).',
+    'msg_startfail'=> 'Failed to start. Check the event log.',
+    'warn_parse'=> 'settings.cfg is invalid; defaults are shown. Re-save the config.',
+    'warn_nodisk'=> 'No drive selected in config: the collector would sample 0 drives and never update the temperature file.',
+    'health_ok' => 'Healthy',
+    'health_bad'=> 'Errors',
+] : [
+    'title'    => '硬盘温度采集',
+    'running'  => '运行中',
+    'stopped'  => '已停止',
+    'stale'    => '数据陈旧',
+    'ago'      => '前',
+    'updated'  => '更新',
+    'refresh'  => '刷新列表',
+    'start'    => '启动采集',
+    'settings' => '采集设置',
+    'hdd'      => 'HDD 硬盘',
+    'ssd'      => 'SSD 硬盘',
+    'blocks'   => '块',
+    'max'      => '最大',
+    'min'      => '最小',
+    'avg'      => '平均',
+    'interval' => '采集间隔',
+    'mode'     => '取值方式',
+    'warnlbl'  => '显示告警阈值 / 高温阈值',
+    'scope'    => '采集范围',
+    'save'     => '保存',
+    'cancel'   => '取消',
+    'unsaved'  => '有未保存的更改',
+    'discard'  => '放弃',
+    'log'      => '事件日志',
+    'paths'    => '文件与路径',
+    'export'   => '导出 CSV',
+    'copy'     => '复制清单',
+    'last'     => '最后成功采集',
+    'next'     => '下一轮',
+    'pid'      => '采集器 PID',
+    'nodata'   => '暂无数据',
+    'title_agg'=> 'HDD 取值方式',
+    'title_agg2'=> 'SSD 取值方式',
+    'hint_iv'  => '5–60 秒。保存后在下一轮自动生效，<b>不中断采集</b>。',
+    'hint_th'  => '仅用于页面着色与日志提醒（≥告警=橙色，≥高温=红色），<b>不控制风扇</b>；风扇曲线在 CoolerControl 中设置。',
+    'hint_scope'=> '在左右列表里取消勾选即可排除某块盘；<b>至少保留 1 块</b>。',
+    'note_save'=> '保存后 ≤',
+    'note_save2'=> ' 秒生效<br>不重启采集器，无数据空窗',
+    'selectall'=> '全选',
+    'invert'   => '反选',
+    'err_nodisk'=> '至少需要选择一块磁盘，配置未保存。',
+    'msg_saved'=> '已保存，将在下一轮（≤%d 秒）生效，采集未中断。',
+    'msg_saved_stopped'=> '已保存。采集器当前未运行，请点击「启动采集」。',
+    'msg_savefail'=> '配置写入失败（磁盘或权限问题），已保持原配置。',
+    'msg_started'=> '采集器已启动（PID %d）。',
+    'msg_startfail'=> '启动失败，请查看事件日志。',
+    'warn_parse'=> 'settings.cfg 解析失败，页面显示的是默认值；采集器当前可能采不到数据，请重新保存配置。',
+    'warn_nodisk'=> '配置中没有任何磁盘：采集器会采集 0 块盘、温度文件不会更新。请勾选后保存。',
+    'health_ok' => '正常',
+    'health_bad'=> '异常',
+];
+
+// ③ 配置域 -------------------------------------------------------------------
+function cct_load_cfg(): array {
+    global $CFG;
+    $def = ['i' => 10, 'd' => [], 'e' => false, 'hm' => 'avg', 'sm' => 'avg', 'warn' => 40, 'hot' => 50];
+    if (!file_exists($CFG)) return $def;
+    $c = json_decode((string)@file_get_contents($CFG), true);
+    if (!is_array($c)) { $GLOBALS['CCT_CFG_ERROR'] = true; return $def; }
+    return array_merge($def, $c);
+}
+
+/** 原子写：临时文件 → JSON 校验 → rename（避免采集器读到半截配置） */
+function cct_save_cfg(array $cfg): bool {
+    global $CFG;
+    $tmp  = $CFG . '.tmp';
+    $json = json_encode($cfg, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
+    if ($json === false || @file_put_contents($tmp, $json) === false) return false;
+    if (!is_array(json_decode((string)@file_get_contents($tmp), true))) { @unlink($tmp); return false; }
+    return @rename($tmp, $CFG);
+}
+
+/** 配置差异（含前后值），写审计日志用 */
+function cct_cfg_diff(array $old, array $new): string {
+    $out = [];
+    if (($old['i'] ?? '') != ($new['i'] ?? '')) $out[] = "间隔 {$old['i']}s→{$new['i']}s";
+    if (($old['hm'] ?? '') != ($new['hm'] ?? '')) $out[] = "HDD {$old['hm']}→{$new['hm']}";
+    if (($old['sm'] ?? '') != ($new['sm'] ?? '')) $out[] = "SSD {$old['sm']}→{$new['sm']}";
+    if (($old['warn'] ?? '') != ($new['warn'] ?? '')) $out[] = "告警 {$old['warn']}→{$new['warn']}";
+    if (($old['hot'] ?? '') != ($new['hot'] ?? '')) $out[] = "高温 {$old['hot']}→{$new['hot']}";
+    $oc = is_array($old['d'] ?? null) ? count($old['d']) : 0;
+    $nc = is_array($new['d'] ?? null) ? count($new['d']) : 0;
+    if ($oc != $nc) $out[] = "盘数 {$oc}→{$nc}";
+    return $out ? implode('; ', $out) : '无字段变化';
+}
+
+// ④ 跨域调用 ----------------------------------------------------------------
+/** 调用 CLI 子模块并解析 JSON */
+function cct_cli_json(string $script, string $arg = ''): array {
+    $cmd = 'php ' . escapeshellarg($script) . ($arg !== '' ? ' ' . escapeshellarg($arg) : '') . ' 2>/dev/null';
+    $o = [];
+    exec($cmd, $o);
+    $j = json_decode(implode("\n", $o), true);
+    return is_array($j) ? $j : [];
+}
+
+/** 统一时间戳：走 shell date，保证与采集器同源（PHP CLI 默认 UTC，emhttp 下才是本地时区） */
+function cct_now(): string {
+    $t = trim((string)@shell_exec('date "+%Y-%m-%d %H:%M:%S" 2>/dev/null'));
+    return $t !== '' ? $t : date('Y-m-d H:i:s');
+}
+
+function cct_log(string $line): void {
+    global $LOG_FILE;
+    @file_put_contents($LOG_FILE, '[' . cct_now() . "] [INFO] $line\n", FILE_APPEND);
+}
+
+// ⑤ AJAX：刷新列表（只重扫，不动进程）----------------------------------------
+if (isset($_GET['scan']) && $_GET['scan'] === '1') {
+    header('Content-Type: application/json; charset=utf-8');
+    $c  = cct_load_cfg();
+    $s  = is_array($c['d']) ? $c['d'] : [];
+    $aa = cct_cli_json($SCAN);
+    $mk = function ($d) use ($s) {
+        return ['dev' => $d['dev'], 'model' => $d['model'], 'serial' => $d['serial'],
+                'sas' => $d['sas'], 'temp' => $d['temp'],
+                'checked' => (empty($s) || in_array($d['serial'], $s, true))];
+    };
+    echo json_encode(['hdd' => array_map($mk, $aa['hdd'] ?? []),
+                      'ssd' => array_map($mk, $aa['ssd'] ?? [])], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// ⑥ 动作：保存 / 启动 --------------------------------------------------
+$msg = ''; $err = '';
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['#apply'])) {
+    $iv   = max(5, min(60, intval($_POST['interval'] ?? 10)));
+    $ds   = isset($_POST['disks']) && is_array($_POST['disks'])
+            ? array_values(array_filter($_POST['disks'], fn($s) => is_string($s) && $s !== '')) : [];
+    $hm   = in_array($_POST['hdd_mode'] ?? '', ['avg', 'max'], true) ? $_POST['hdd_mode'] : 'avg';
+    $sm   = in_array($_POST['ssd_mode'] ?? '', ['avg', 'max'], true) ? $_POST['ssd_mode'] : 'avg';
+    $warn = max(20, min(65, intval($_POST['warn'] ?? 40)));
+    $hot  = max($warn + 1, min(80, intval($_POST['hot'] ?? 50)));
+
+    if (count($ds) === 0) {
+        $err = $L['err_nodisk'];
+    } else {
+        $old = cct_load_cfg();
+        $new = ['i' => $iv, 'd' => $ds, 'e' => true, 'hm' => $hm, 'sm' => $sm, 'warn' => $warn, 'hot' => $hot];
+        if (cct_save_cfg($new)) {
+            cct_log('配置变更: ' . cct_cfg_diff($old, $new));
+            $run = (cct_cli_json($CTL, 'status')['running'] ?? false);
+            $msg = $run ? sprintf($L['msg_saved'], $iv) : $L['msg_saved_stopped'];
+        } else {
+            $err = $L['msg_savefail'];
+        }
+    }
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['#start'])) {
+    $r = cct_cli_json($CTL, 'start');
+    $msg = !empty($r['pid']) ? sprintf($L['msg_started'], $r['pid']) : $L['msg_startfail'];
+}
+
+// ⑦ 数据准备 ----------------------------------------------------------------
+$cfg  = cct_load_cfg();
+$sel  = is_array($cfg['d']) ? $cfg['d'] : [];
+$IV   = intval($cfg['i'] ?? 10);
+$WARN = intval($cfg['warn'] ?? 40);
+$HOT  = intval($cfg['hot'] ?? 50);
+
+$scan  = cct_cli_json($SCAN);
+$hdds  = $scan['hdd'] ?? [];
+$ssds  = $scan['ssd'] ?? [];
+$all_s = array_merge(array_column($hdds, 'serial'), array_column($ssds, 'serial'));
+$sc    = count(array_intersect($sel, $all_s));
+
+$ctl  = cct_cli_json($CTL, 'status');
+$run  = (bool)($ctl['running'] ?? false);
+$runPid = intval($ctl['pid'] ?? 0);
+
+$hdd_val = file_exists($OUT_HDD) ? intval(trim((string)@file_get_contents($OUT_HDD))) / 1000 : null;
+$ssd_val = file_exists($OUT_SSD) ? intval(trim((string)@file_get_contents($OUT_SSD))) / 1000 : null;
+$age     = file_exists($OUT_HDD) ? max(0, time() - filemtime($OUT_HDD)) : null;
+$stale   = $run && ($age === null || $age > max(30, $IV * 3));
+
+$state = !$run ? 'stopped' : ($stale ? 'stale' : 'running');
+$stateLabel = ['running' => $L['running'], 'stopped' => $L['stopped'], 'stale' => $L['stale']][$state];
+
+$hddMax = null; $ssdMax = null;
+foreach ($hdds as $d) if ($d['temp'] !== null) $hddMax = max($hddMax ?? 0, $d['temp']);
+foreach ($ssds as $d) if ($d['temp'] !== null) $ssdMax = max($ssdMax ?? 0, $d['temp']);
+
+$errors = 0; $elapsed = null;
+$statusFile = '/usr/local/emhttp/plugins/cooler-hddtemp/status.json';
+if (file_exists($statusFile)) {
+    $sj = json_decode((string)@file_get_contents($statusFile), true);
+    if (is_array($sj)) { $errors = intval($sj['errors'] ?? 0); $elapsed = $sj['elapsed'] ?? null; }
+}
+
+$cfg_warn = '';
+if (!empty($GLOBALS['CCT_CFG_ERROR'])) $cfg_warn = $L['warn_parse'];
+elseif (count($sel) === 0)              $cfg_warn = $L['warn_nodisk'];
+
+$log_lines = [];
+if (file_exists($LOG_FILE)) {
+    $log_lines = array_slice(array_reverse(file($LOG_FILE, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES)), 0, 60);
+}
+
+/** 相对时间（秒 → 中文/英文描述） */
+function cct_ago(?int $s, string $lang): string {
+    if ($s === null) return '';
+    if ($s < 5)    return $lang === 'en' ? 'just now' : '刚刚';
+    if ($s < 60)   return $lang === 'en' ? "{$s}s ago" : "{$s} 秒前";
+    if ($s < 3600) { $m = (int)floor($s / 60); return $lang === 'en' ? "{$m} min ago" : "{$m} 分钟前"; }
+    $h = (int)floor($s / 3600);
+    return $lang === 'en' ? "{$h} h ago" : "{$h} 小时前";
+}
+
+/** 温度 → 语义色 */
+function cct_tcolor(?int $t, int $WARN, int $HOT): string {
+    if ($t === null) return 'var(--text)';
+    if ($t >= $HOT)  return 'var(--hot)';
+    if ($t >= $WARN) return 'var(--warn)';
+    return 'var(--ok)';
+}
+
+/** 单块盘的行渲染 */
+function cct_row(array $d, array $sel, int $WARN, int $HOT): string {
+    $sn    = htmlspecialchars($d['serial'], ENT_QUOTES);
+    $model = htmlspecialchars($d['model'] ?: $d['dev']);
+    $t     = $d['temp'];
+    $chk   = (empty($sel) || in_array($d['serial'], $sel, true)) ? 'checked' : '';
+    $cls = ''; $color = 'var(--ok)'; $pct = 0;
+    if ($t !== null) {
+        if ($t >= $HOT)      { $cls = 'hot';  $color = 'var(--hot)'; }
+        elseif ($t >= $WARN) { $cls = 'warn'; $color = 'var(--warn)'; }
+        $pct = (int) max(0, min(100, ($t - 20) / 40 * 100));
+    }
+    $tag  = $d['sas'] ? '<span class="tag sas">SAS</span>' : '<span class="tag">SATA</span>';
+    $tTxt = $t === null ? '—' : $t . '°C';
+    return '<div class="row' . ($cls ? ' ' . $cls : '') . '" data-sn="' . $sn . '">'
+         . '<input class="cb" type="checkbox" name="disks[]" value="' . $sn . '" ' . $chk . '>'
+         . '<div class="id"><div class="m">' . $model . '</div><div class="s">' . $sn . '</div></div>'
+         . $tag
+         . '<div class="tm"><span class="t" style="color:' . $color . '">' . $tTxt . '</span>'
+         . '<span class="bar"><i style="width:' . $pct . '%;background:' . $color . '"></i></span></div>'
+         . '</div>';
+}
+
+$rowsJson = json_encode(array_map(function ($d) {
+    return ['sn' => $d['serial'], 'model' => $d['model'] ?: $d['dev'],
+            'type' => $d['sas'] ? 'SAS' : 'SATA', 'temp' => $d['temp']];
+}, array_merge($hdds, $ssds)), JSON_UNESCAPED_UNICODE);
+?>
+<!DOCTYPE html>
+<html lang="<?= $lang === 'en' ? 'en' : 'zh-CN' ?>">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="<?= $ASSETS ?>/cct.css">
+</head>
+<body>
+<div id="cct">
+<div id="cct-data"
+     data-i="<?= $IV ?>" data-warn="<?= $WARN ?>" data-hot="<?= $HOT ?>"
+     data-rows="<?= htmlspecialchars($rowsJson, ENT_QUOTES) ?>"
+     hidden></div>
+
+<form markdown="1" method="POST" id="cctf">
+<input type="hidden" name="#file" value="cooler-hddtemp/settings.cfg">
+<div class="wrap">
+
+  <!-- 页头 -->
+  <div class="head">
+    <div>
+      <h1><?= $L['title'] ?><span class="pill <?= $state ?>"><i></i><?= $stateLabel ?></span></h1>
+      <div class="meta" id="meta">
+        <b><?= $age === null ? $L['nodata'] : cct_ago($age, $lang) ?></b> ·
+        <?= $L['interval'] ?> <?= $IV ?>s · <?= $sc ?>/<?= count($all_s) ?> <?= $L['blocks'] ?>
+        <?= $elapsed !== null ? ' · ' . intval($elapsed) . 's' : '' ?> · <?= $errors ?> <?= $lang === 'en' ? 'err' : '错误' ?>
+      </div>
+    </div>
+    <div class="acts">
+      <button type="button" class="btn" data-act="rescan">⟳ <?= $L['refresh'] ?></button>
+      <?php if (!$run): ?>
+        <button type="submit" name="#start" class="btn primary">▶ <?= $L['start'] ?></button>
+      <?php endif; ?>
+      <button type="button" class="btn" data-act="drawer" data-on="1"><?= $L['settings'] ?></button>
+      <button type="button" class="btn icon" data-act="lang" data-lang="<?= $lang === 'en' ? 'zh' : 'en' ?>"><?= $lang === 'en' ? '中' : 'EN' ?></button>
+    </div>
+  </div>
+
+  <?php if ($msg): ?><div class="msg ok"><?= htmlspecialchars($msg) ?></div><?php endif; ?>
+  <?php if ($err): ?><div class="msg bad"><?= htmlspecialchars($err) ?></div><?php endif; ?>
+  <?php if ($cfg_warn): ?><div class="warnbar">⚠ <?= htmlspecialchars($cfg_warn) ?></div><?php endif; ?>
+
+  <div class="dirty" id="dirty" data-label="<?= htmlspecialchars($L['unsaved'], ENT_QUOTES) ?>">
+    <span class="dt" id="dirtyText"></span>
+    <button type="submit" name="#apply" class="btn"><?= $L['save'] ?></button>
+    <button type="button" class="btn" data-act="reset"><?= $L['discard'] ?></button>
+  </div>
+
+  <!-- 统计 -->
+  <div class="stats">
+    <div class="stat"><span class="dot" id="dotHdd" style="background:<?= cct_tcolor($hddMax, $WARN, $HOT) ?>"></span>
+      <div><div class="v" id="vHdd" style="color:<?= cct_tcolor($hddMax, $WARN, $HOT) ?>"><?= $hddMax === null ? '—' : number_format($hddMax, 1) ?><small>°C</small></div>
+      <div class="k">HDD <?= $L['max'] ?> · <?= count($hdds) ?> <?= $L['blocks'] ?></div></div></div>
+    <div class="stat"><span class="dot" id="dotSsd" style="background:<?= cct_tcolor($ssdMax, $WARN, $HOT) ?>"></span>
+      <div><div class="v" id="vSsd" style="color:<?= cct_tcolor($ssdMax, $WARN, $HOT) ?>"><?= $ssdMax === null ? '—' : number_format($ssdMax, 1) ?><small>°C</small></div>
+      <div class="k">SSD <?= $L['max'] ?> · <?= count($ssds) ?> <?= $L['blocks'] ?></div></div></div>
+    <div class="stat"><span class="dot" style="background:var(--ok)"></span>
+      <div><div class="v"><?= $sc ?><small>/<?= count($all_s) ?></small></div>
+      <div class="k"><?= $L['scope'] ?> · SAS <?= count(array_filter($hdds, fn($d) => $d['sas'])) ?></div></div></div>
+    <div class="stat"><span class="dot" style="background:<?= $errors ? 'var(--hot)' : 'var(--ok)' ?>"></span>
+      <div><div class="v" id="vHealth" data-ok="<?= htmlspecialchars($L['health_ok'], ENT_QUOTES) ?>"
+        data-bad="<?= htmlspecialchars($L['health_bad'], ENT_QUOTES) ?>"
+        style="color:<?= $errors ? 'var(--hot)' : 'var(--ok)' ?>"><?= $errors ? $L['health_bad'] : $L['health_ok'] ?></div>
+      <div class="k"><?= $errors ?> <?= $lang === 'en' ? 'err' : '错误' ?> · <?= $stale ? $L['stale'] : ($lang === 'en' ? 'fresh' : '数据新鲜') ?></div></div></div>
+  </div>
+
+  <!-- 双栏 -->
+  <div class="split">
+    <div class="panel">
+      <div class="p-h"><span class="t"><?= $L['hdd'] ?></span>
+        <span class="c" id="cntHdd" data-unit="<?= $L['blocks'] ?>"><?= count($hdds) ?> <?= $L['blocks'] ?></span>
+        <span class="hi" id="hiHdd" data-max="<?= $L['max'] ?>" style="color:var(--warn)"><?= $L['max'] ?> <?= $hddMax === null ? '—' : $hddMax . '°C' ?></span>
+        <button type="button" class="lnk" data-act="all" data-which="hdd" data-sel="1"><?= $L['selectall'] ?></button>
+        <button type="button" class="lnk" data-act="all" data-which="hdd" data-sel="0"><?= $L['invert'] ?></button>
+      </div>
+      <div class="rows" id="rowsHdd">
+        <?php foreach ($hdds as $d) echo cct_row($d, $sel, $WARN, $HOT); ?>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="p-h"><span class="t"><?= $L['ssd'] ?></span>
+        <span class="c" id="cntSsd" data-unit="<?= $L['blocks'] ?>"><?= count($ssds) ?> <?= $L['blocks'] ?></span>
+        <span class="hi" id="hiSsd" data-max="<?= $L['max'] ?>" style="color:var(--warn)"><?= $L['max'] ?> <?= $ssdMax === null ? '—' : $ssdMax . '°C' ?></span>
+        <button type="button" class="lnk" data-act="all" data-which="ssd" data-sel="1"><?= $L['selectall'] ?></button>
+        <button type="button" class="lnk" data-act="all" data-which="ssd" data-sel="0"><?= $L['invert'] ?></button>
+      </div>
+      <div class="rows" id="rowsSsd">
+        <?php foreach ($ssds as $d) echo cct_row($d, $sel, $WARN, $HOT); ?>
+      </div>
+    </div>
+  </div>
+
+  <!-- 页脚 -->
+  <div class="foot">
+    <span><?= $L['last'] ?> <b><?= $age === null ? '—' : (trim((string)@shell_exec('date -r ' . escapeshellarg($OUT_HDD) . ' "+%H:%M:%S" 2>/dev/null')) ?: date('H:i:s', filemtime($OUT_HDD))) ?></b></span>
+    <span><?= $L['next'] ?> <b><?= $IV ?>s</b></span>
+    <span><?= $L['pid'] ?> <b><?= $runPid ?: '—' ?></b></span>
+    <span><?= $L['interval'] ?> <b><?= $IV ?>s</b> · HDD <b><?= $cfg['hm'] === 'max' ? $L['max'] : $L['avg'] ?></b> ·
+      SSD <b><?= $cfg['sm'] === 'max' ? $L['max'] : $L['avg'] ?></b></span>
+    <button type="button" class="btn" style="padding:3px 9px;font-size:12px" data-act="export"><?= $L['export'] ?></button>
+    <button type="button" class="btn" style="padding:3px 9px;font-size:12px" data-act="copy"><?= $L['copy'] ?></button>
+  </div>
+
+  <details>
+    <summary><?= $L['log'] ?> (<?= count($log_lines) ?>)</summary>
+    <pre><?php
+      if (empty($log_lines)) echo htmlspecialchars($L['nodata']);
+      else foreach ($log_lines as $line) echo htmlspecialchars($line) . "\n";
+    ?></pre>
+  </details>
+  <details>
+    <summary><?= $L['paths'] ?></summary>
+    <div class="pathgrid">
+      <span>HDD</span><code><?= $OUT_HDD ?></code>
+      <span>SSD</span><code><?= $OUT_SSD ?></code>
+      <span>config</span><code><?= $CFG ?></code>
+      <span>log</span><code><?= $LOG_FILE ?></code>
+      <span>collector</span><code><?= $D ?>/scripts/collector.sh</code>
+    </div>
+  </details>
+</div>
+
+<!-- 设置抽屉 -->
+<div class="scrim" data-act="drawer" data-on="0"></div>
+<aside class="drawer" aria-label="<?= $L['settings'] ?>">
+  <div class="d-h"><b><?= $L['settings'] ?></b><button type="button" class="x" data-act="drawer" data-on="0">✕</button></div>
+  <div class="d-b">
+    <div class="fld">
+      <label for="fInterval"><?= $L['interval'] ?></label>
+      <div class="slider">
+        <input type="range" name="interval" id="fInterval" min="5" max="60" step="1" value="<?= $IV ?>">
+        <output id="oInterval"><?= $IV ?>s</output>
+      </div>
+      <div class="hint"><?= $L['hint_iv'] ?></div>
+    </div>
+    <div class="fld">
+      <label><?= $L['title_agg'] ?></label>
+      <div class="seg">
+        <input type="radio" name="hdd_mode" id="hmMax" value="max" <?= $cfg['hm'] === 'max' ? 'checked' : '' ?>><label for="hmMax"><?= $L['max'] ?></label>
+        <input type="radio" name="hdd_mode" id="hmAvg" value="avg" <?= $cfg['hm'] === 'avg' ? 'checked' : '' ?>><label for="hmAvg"><?= $L['avg'] ?></label>
+      </div>
+    </div>
+    <div class="fld">
+      <label><?= $L['title_agg2'] ?></label>
+      <div class="seg">
+        <input type="radio" name="ssd_mode" id="smMax" value="max" <?= $cfg['sm'] === 'max' ? 'checked' : '' ?>><label for="smMax"><?= $L['max'] ?></label>
+        <input type="radio" name="ssd_mode" id="smAvg" value="avg" <?= $cfg['sm'] === 'avg' ? 'checked' : '' ?>><label for="smAvg"><?= $L['avg'] ?></label>
+      </div>
+    </div>
+    <div class="fld">
+      <label for="fWarn"><?= $L['warnlbl'] ?></label>
+      <div class="two">
+        <input class="inp" type="number" name="warn" id="fWarn" min="20" max="65" value="<?= $WARN ?>">
+        <input class="inp" type="number" name="hot" id="fHot" min="21" max="80" value="<?= $HOT ?>">
+      </div>
+      <div class="hint"><?= $L['hint_th'] ?></div>
+    </div>
+    <div class="fld">
+      <label><?= $L['scope'] ?></label>
+      <div class="hint"><?= $L['hint_scope'] ?></div>
+    </div>
+  </div>
+  <div class="d-f">
+    <span class="note"><?= $L['note_save'] ?><span id="noteIv"><?= $IV ?></span><?= $L['note_save2'] ?></span>
+    <button type="button" class="btn" data-act="drawer" data-on="0"><?= $L['cancel'] ?></button>
+    <button type="submit" name="#apply" class="btn primary"><?= $L['save'] ?></button>
+  </div>
+</aside>
+</form>
+</div>
+<script src="<?= $ASSETS ?>/cct.js"></script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+Menu=""
+Title="Drive Temperature (English)"
+Icon="fa-thermometer-half"
+Tag="cooler-hddtemp-en"
+---
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0;url=/Settings/cooler-hddtemp?lang=en">
+<title>Drive Temperature</title>
+</head>
+<body style="font-family:sans-serif;padding:24px">
+<p>This page has moved. <a href="/Settings/cooler-hddtemp?lang=en">Open Drive Temperature (English)</a></p>
+</body>
+</html>

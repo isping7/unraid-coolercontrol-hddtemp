@@ -1,0 +1,18 @@
+# runtime / local state
+settings.cfg
+event.log
+status.json
+*.bak
+*.bak-*
+*.tmp
+*.log
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# editors
+.vscode/
+.idea/
+*.swp

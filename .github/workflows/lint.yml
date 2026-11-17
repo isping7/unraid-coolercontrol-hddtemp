@@ -1,0 +1,51 @@
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  syntax:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          coverage: none
+
+      - name: PHP lint (lib + page after stripping front-matter)
+        run: |
+          set -e
+          for f in plugin/lib/*.php; do php -l "$f"; done
+          for f in plugin/*.page; do
+            tail -n +6 "$f" > /tmp/page.php
+            php -l /tmp/page.php
+          done
+
+      - name: .page header integrity (emhttp splits on literal newline---newline)
+        run: |
+          php -r '
+            foreach (glob("plugin/*.page") as $e) {
+              $p = explode("\n---\n", file_get_contents($e));
+              if (count($p) !== 2) { fwrite(STDERR, "$e: header split failed\n"); exit(1); }
+              $i = @parse_ini_string($p[0]);
+              if (!$i || !isset($i["Tag"])) { fwrite(STDERR, "$e: header parse failed\n"); exit(1); }
+              printf("%s: Menu=%s Tag=%s Icon=%s\n", basename($e), $i["Menu"] ?? "", $i["Tag"], $i["Icon"] ?? "-");
+            }'
+
+      - name: No CRLF anywhere in shipped files
+        run: |
+          if grep -rIl $'\r' plugin/ ; then
+            echo "::error::CRLF found — emhttp .page parsing will fail"; exit 1
+          fi
+
+      - name: Shell syntax
+        run: |
+          for f in plugin/scripts/*.sh plugin/bin/*.sh; do bash -n "$f"; done
+
+      - name: JS syntax
+        run: node --check plugin/assets/cct.js

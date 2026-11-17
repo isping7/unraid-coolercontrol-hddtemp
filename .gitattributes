@@ -1,0 +1,5 @@
+# Unraid/.page files MUST stay LF: emhttp splits headers on the literal newline---newline sequence
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+
