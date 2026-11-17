@@ -16,6 +16,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/); versioning is
 - Ideal after replacing a disk: no manual re-selection, no CoolerControl change.
 
 ### Notes
+- **Mutual exclusion with manual selection**: saving a partial selection switches Auto-add off
+  (the server enforces this even if a crafted POST asks for it), and turning Auto-add on selects
+  every drive. Both directions ask for confirmation first.
 - Enabling it **overrides manual exclusions** — a drive you unticked will be re-added.
   That is why the default is off.
 ## [3.0.0] — 2026-11-17

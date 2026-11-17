@@ -12,10 +12,10 @@
 <!ELEMENT MD5 (#PCDATA)>
 <!ELEMENT INSTALL (#PCDATA)>
 ]>
-<PLUGIN name="cooler-hddtemp" author="mac-ping" version="2026.11.17.1" pluginURL="https://github.com/isping7/unraid-coolercontrol-hddtemp" minVersion="7.0" launch="Settings/cooler-hddtemp" support="https://github.com/isping7/unraid-coolercontrol-hddtemp/issues">
+<PLUGIN name="cooler-hddtemp" author="mac-ping" version="2026.11.17.2" pluginURL="https://github.com/isping7/unraid-coolercontrol-hddtemp" minVersion="7.0" launch="Settings/cooler-hddtemp" support="https://github.com/isping7/unraid-coolercontrol-hddtemp/issues">
 <NAME>Drive Temperature (cooler-hddtemp)</NAME>
 <AUTHOR>mac-ping</AUTHOR>
-<VERSION>2026.11.17.1</VERSION>
+<VERSION>2026.11.17.2</VERSION>
 <DATE>2026-11-17</DATE>
 <DESCRIPTION>
 Collect HDD/SSD temperatures with smartctl and publish them as millidegree files for
@@ -23,13 +23,13 @@ CoolerControl file sensors. Max or average aggregation, hot-reload settings, dua
 WebUI, auto-add new drives, self-test script.
 </DESCRIPTION>
 <CHANGES>
-[2026.11.17.1] v3.1.0: auto-add new drives (opt-in, HDD/SSD decided by smartctl).
+[2026.11.17.2] v3.1.0: auto-add new drives (opt-in, HDD/SSD decided by smartctl).
 [2026.11.17] v3.0: split architecture, single-page i18n, hot-reload saves, atomic config writes,
 configurable thresholds, dual-pane responsive UI, selftest.sh; removed the stop button.
 </CHANGES>
 <FILE Name="/boot/config/plugins/cooler-hddtemp/cooler-hddtemp.page">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/cooler-hddtemp.page</URL>
-<MD5>373355560611fd1b5d16c80b08778364</MD5>
+<MD5>ee85d432f68a041c882bf798f223cb36</MD5>
 </FILE>
 
 <FILE Name="/boot/config/plugins/cooler-hddtemp/cooler-hddtemp-en.page">
@@ -44,7 +44,7 @@ configurable thresholds, dual-pane responsive UI, selftest.sh; removed the stop 
 
 <FILE Name="/boot/config/plugins/cooler-hddtemp/assets/cct.js">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/assets/cct.js</URL>
-<MD5>4837ca69f59f8cffb9d899f931d4c1ac</MD5>
+<MD5>658b58f01db9a8ea7f1074f88c1f242d</MD5>
 </FILE>
 
 <FILE Name="/boot/config/plugins/cooler-hddtemp/lib/scan.php">
@@ -69,9 +69,8 @@ configurable thresholds, dual-pane responsive UI, selftest.sh; removed the stop 
 
 <FILE Name="/boot/config/plugins/cooler-hddtemp/bin/selftest.sh">
 <URL>https://raw.githubusercontent.com/isping7/unraid-coolercontrol-hddtemp/main/plugin/bin/selftest.sh</URL>
-<MD5>1055baf0973478b7cdd788b1e17df79a</MD5>
+<MD5>2b86843f55b263712740b1eaf169a274</MD5>
 </FILE>
-
 
 <INSTALL>
 #!/bin/bash

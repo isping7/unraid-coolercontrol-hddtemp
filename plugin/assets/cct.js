@@ -179,6 +179,48 @@
     x.send();
   }
 
+  /* ---------- 手动勾选 与 自动纳入 互斥（两次确认） ---------- */
+  var MSG = {
+    zh: {
+      on: '开启后会把 smartctl 扫到的全部磁盘纳入（含你排除的盘）并全选。确定开启？',
+      off: '取消勾选会关闭「自动纳入新盘」，否则它会在 60 秒内被加回来。确定关闭自动纳入并保留你的选择？'
+    },
+    en: {
+      on: 'Auto-add includes every drive smartctl can see. The drives you excluded will be added back and selected. Continue?',
+      off: 'Unticking a drive turns Auto-add off (otherwise it would be added back within 60 s). Turn it off and keep your selection?'
+    }
+  };
+  function msgs() { return (document.documentElement.lang || 'zh').indexOf('en') === 0 ? MSG.en : MSG.zh; }
+  function diskBoxes() { return Array.prototype.slice.call(document.querySelectorAll('input[name="disks[]"]')); }
+
+  var autoBox = document.getElementById('fAuto');
+  if (autoBox) {
+    // 开自动纳入：若未全选 → 确认后全选；取消则回滚开关
+    autoBox.addEventListener('change', function () {
+      if (!autoBox.checked) return;
+      var all = diskBoxes();
+      var unchecked = all.filter(function (c) { return !c.checked; });
+      if (unchecked.length === 0) return;
+      if (window.confirm(msgs().on)) {
+        all.forEach(function (c) { c.checked = true; });
+      } else {
+        autoBox.checked = false;
+      }
+      checkDirty();
+    });
+
+    // 取消勾选某块盘：若自动纳入开着 → 确认后关闭开关；取消则把勾恢复
+    document.addEventListener('change', function (e) {
+      var t = e.target;
+      if (!t || t.name !== 'disks[]' || t.checked || !autoBox.checked) return;
+      if (window.confirm(msgs().off)) {
+        autoBox.checked = false;
+      } else {
+        t.checked = true;
+      }
+      checkDirty();
+    });
+  }
   /* ---------- 导出 / 复制 ---------- */
   function tableRows() {
     return Array.prototype.map.call(document.querySelectorAll('.row[data-sn]'), function (r) {

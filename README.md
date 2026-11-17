@@ -32,7 +32,7 @@ don't provide one, so HDD/SSD temperature is invisible to it. This plugin:
 - **Dual-pane UI**: all HDDs on the left, all SSDs on the right, everything on one screen
   (tested at 1024 / 1280 / 1920 / 2560 / 3840 px)
 - **Bilingual UI** (中文 / English) via cookie
-- **Auto-add new drives** (opt-in): every 60 s the collector compares the smartctl scan with the saved list and adopts drives that appeared — HDD/SSD is decided by smartctl, SAS counts as HDD. Ideal after replacing a disk.
+- **Auto-add new drives** (opt-in): every 60 s the collector compares the smartctl scan with the saved list and adopts drives that appeared — HDD/SSD is decided by smartctl, SAS counts as HDD. Ideal after replacing a disk. **Mutually exclusive with manual selection**: saving a partial selection turns it off, turning it on selects all drives, and both directions ask for confirmation.
 - **Configurable warn/hot thresholds** — colours and log hints only; **they do not touch fans**
 - **Self-test script** (`bin/selftest.sh`) with 18 read-only checks, or 34 including
   destructive fail-safe tests

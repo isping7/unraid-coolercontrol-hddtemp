@@ -49,7 +49,7 @@ $L = $lang === 'en' ? [
     'mode'     => 'Aggregation',
     'warnlbl'  => 'Warn / Hot threshold',
       'auto'     => 'Auto-add new drives',
-      'auto_hint'=> 'Checked every 60 s: drives that appear but are not in the list are added automatically. HDD/SSD is decided by smartctl (SAS counts as HDD). Overrides manual exclusions.',
+      'auto_hint'=> 'Checked every 60 s: drives that appear but are not in the list are added automatically. HDD/SSD is decided by smartctl (SAS counts as HDD). Saving a partial selection turns this off.',
     'scope'    => 'Scope',
     'save'     => 'Save',
     'cancel'   => 'Cancel',
@@ -76,6 +76,7 @@ $L = $lang === 'en' ? [
     'msg_saved'=> 'Saved. Takes effect on the next round (≤%ds). Collection was not interrupted.',
     'msg_saved_stopped'=> 'Saved. The collector is not running — click Start.',
     'msg_savefail'=> 'Failed to save (disk or permission issue). Previous config kept.',
+    'auto_forced_off'=> 'Auto-add was turned off: only %d of %d drives are selected.',
     'msg_started'=> 'Collector started (PID %d).',
     'msg_startfail'=> 'Failed to start. Check the event log.',
     'warn_parse'=> 'settings.cfg is invalid; defaults are shown. Re-save the config.',
@@ -102,7 +103,7 @@ $L = $lang === 'en' ? [
     'mode'     => '取值方式',
     'warnlbl'  => '显示告警阈值 / 高温阈值',
       'auto'     => '自动纳入新盘',
-      'auto_hint'=> '每 60 秒探测一次：扫到但不在列表里的盘会自动加入，HDD/SSD 由 smartctl 判定（SAS 归入 HDD）。注意：开启后会覆盖你手动取消勾选的意图。',
+      'auto_hint'=> '每 60 秒探测一次：扫到但不在列表里的盘会自动加入，HDD/SSD 由 smartctl 判定（SAS 归入 HDD）。与手动排除互斥：只勾选部分盘并保存会自动关闭本开关。',
     'scope'    => '采集范围',
     'save'     => '保存',
     'cancel'   => '取消',
@@ -129,6 +130,7 @@ $L = $lang === 'en' ? [
     'msg_saved'=> '已保存，将在下一轮（≤%d 秒）生效，采集未中断。',
     'msg_saved_stopped'=> '已保存。采集器当前未运行，请点击「启动采集」。',
     'msg_savefail'=> '配置写入失败（磁盘或权限问题），已保持原配置。',
+    'auto_forced_off'=> '只勾选了 %d/%d 块盘，已自动关闭「自动纳入新盘」。',
     'msg_started'=> '采集器已启动（PID %d）。',
     'msg_startfail'=> '启动失败，请查看事件日志。',
     'warn_parse'=> 'settings.cfg 解析失败，页面显示的是默认值；采集器当前可能采不到数据，请重新保存配置。',
@@ -221,6 +223,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['#apply'])) {
     $hot  = max($warn + 1, min(80, intval($_POST['hot'] ?? 50)));
     $auto = !empty($_POST['auto']);
 
+    // 互斥：只勾选部分磁盘时，自动纳入必须关闭（否则 60 秒后会被加回）
+    $autoNote = '';
+    if ($auto) {
+        $scanAll  = cct_cli_json($SCAN);
+        $allCount = count($scanAll['hdd'] ?? []) + count($scanAll['ssd'] ?? []);
+        if ($allCount > 0 && count($ds) < $allCount) {
+            $auto = false;
+            $autoNote = sprintf($L['auto_forced_off'], count($ds), $allCount);
+        }
+    }
+
     if (count($ds) === 0) {
         $err = $L['err_nodisk'];
     } else {
@@ -230,6 +243,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['#apply'])) {
             cct_log('配置变更: ' . cct_cfg_diff($old, $new));
             $run = (cct_cli_json($CTL, 'status')['running'] ?? false);
             $msg = $run ? sprintf($L['msg_saved'], $iv) : $L['msg_saved_stopped'];
+            if ($autoNote !== '') $msg .= ' ' . $autoNote;
         } else {
             $err = $L['msg_savefail'];
         }
